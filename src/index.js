@@ -313,13 +313,32 @@ function createElement(type, props, ...children) {
   };
   
   /** @jsx qcact.createElement */
-  const element = (
-    <div style="background: salmon">
-      <h1>Hello World</h1>
-      <h2 style="text-align:right">from qcact</h2>
-    </div>
-  );
+  // const element = (
+  //   <div style="background: salmon">
+  //     <h1>Hello World</h1>
+  //     <h2 style="text-align:right">from qcact</h2>
+  //   </div>
+  // );
   
   const container = document.getElementById("root");
-  qcact.render(element, container);
+
+  //如果触发了事件，更改了child
+  const updateValue = e => {
+    //对比第一个old fiber tree 重新渲染一遍
+    rerender(e.target.value)
+  }
+
+  const rerender = value =>{
+    const element = (
+      <div> 
+        <input onInput={updateValue} value = {value}/>
+        <h2 style="color:blue">Hello，{value}</h2>
+        
+      </div>
+    )
+    qcact.render(element,container);
+  }
+
+  //生产出第一个fiber tree
+  rerender("World")
   
