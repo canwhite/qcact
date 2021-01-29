@@ -205,24 +205,24 @@ function createElement(type, props, ...children) {
     
 
 
-    //return next unit of work
-    //如果有孩子
+    //第一次把child返回回去，下次进来再找child的child
+    //往下一直找child，找到底
     if(fiber.child){
       return fiber.child
     }
 
-    //b = [1,2,3]  *b取得是1，也就是child
-    //对象也是类似于这样
+    //如果没有child了，在树的最底层child开始找它的兄弟姐妹
     let nextFiber = fiber;
 
-    //如果兄弟节点没有循环完，就一直循环下去
+
     while(nextFiber){
-      //然后寻找child的兄弟节点，
+      //如果有兄弟 就返回兄弟
       if(nextFiber.sibling){
-        return nextFiber.sibling//返回兄弟fiber
+        return nextFiber.sibling
       }
-      //如果没有兄弟姐妹，让它去寻找叔叔吧
-      nextFiber = nextFiber.parent;//返回到fiber的parent
+      //如果没有兄弟了，找到父节点，注意这里没有返回
+      //所以会继续循环，到while里的if寻找叔叔辈返回
+      nextFiber = nextFiber.parent;
     }
 
   }
