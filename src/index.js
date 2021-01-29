@@ -122,7 +122,7 @@ function createElement(type, props, ...children) {
     if(!fiber){
       return
     }
-    //访问父的也就是根
+    //第一次是root，然后下边一层层递归
     const domParent = fiber.parent.dom;
     if(fiber.effectTag === "PLACEMENT" && fiber.dom != null){
       domParent.appendChild(fiber.dom);
