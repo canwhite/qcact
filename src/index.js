@@ -61,15 +61,15 @@ function createElement(type, props, ...children) {
       .filter(
         key =>
           !(key in nextProps) ||
-          isNew(prevProps, nextProps)(key)
+          isNew(prevProps, nextProps)(key)//柯里化应用
       )
       .forEach(name => {
         const eventType = name
           .toLowerCase()
           .substring(2)
         dom.removeEventListener(
-          eventType,
-          prevProps[name]
+          eventType, //去掉on的键值
+          prevProps[name] //对应的逻辑块
         )
       })
   
@@ -122,12 +122,26 @@ function createElement(type, props, ...children) {
     if(!fiber){
       return
     }
+
+    //在这里如果有Function Component对应的fiber
+    //我们要越过去，找到真正的parent dom
+    //fiber中有dom我们才操作
+    let domParentFiber = fiber.parent
+    while(!domParentFiber.dom){
+      domParentFiber = domParentFiber.parent
+    }
     //第一次是root，然后下边一层层递归
-    const domParent = fiber.parent.dom;
+    // const domParent = fiber.parent.dom;
+    const domParent = domParentFiber.dom;
+
     if(fiber.effectTag === "PLACEMENT" && fiber.dom != null){
       domParent.appendChild(fiber.dom);
     }else if(fiber.effectTag === "DELETION"){
-      domParent.removeChild(fiber.dom);
+      // domParent.removeChild(fiber.dom);
+      // 因为funciton component在删除的时候，我们要删除
+      // 真正有dom节点的子节点
+      commitDeletion(fiber,domParent)
+      
     }else if(fiber.effectTag ==="UPDATE" && fiber.dom !=null){
       //更新
       updateDom(fiber.dom,fiber.alternate.props,fiber.props);
@@ -140,6 +154,22 @@ function createElement(type, props, ...children) {
     commitWork(fiber.sibling);
 
   }
+
+  function commitDeletion(fiber,domParent){
+    if(fiber.dom){
+      domParent.removeChild(fiber.dom);
+    }else{
+      //如果没有dom，递归找child的
+      //链表和递归简直是天作之合
+      commitDeletion(fiber.child,domParent);
+    }
+
+
+
+
+  }
+
+
 
   //render像是给了一个初始状态一样
   function render(element,container){
@@ -186,24 +216,14 @@ function createElement(type, props, ...children) {
 
 
   function performUnitOfWork(fiber){
-    //如果传进来没有dom这里会新建
-    if(!fiber.dom){
-      fiber.dom = createDom(fiber);
-    }
-    //为了防止渲染不完成的dom
-    //所以我们从这里删除变种dom
-    /*
-    if(filter.parent){
-       fiber.parent.dom.appendChild(fiber.dom);
-    }
-    */
 
-    //create new fibers
-    const elements = fiber.props.children
-    //比较
-    reconcileChildren(fiber,elements);
-    
-
+    const isFunctionComponent = fiber.type instanceof Function
+    //如果是函数组件
+    if(isFunctionComponent){
+      updateFunctionComponent(fiber);
+    }else{
+      updateHostComponent(fiber);
+    }
 
     //第一次把child返回回去，下次进来再找child的child
     //往下一直找child，找到底
@@ -226,6 +246,47 @@ function createElement(type, props, ...children) {
     }
 
   }
+
+  //如果是函数组件
+  
+  function updateFunctionComponent(fiber){
+    //todo
+    //fiber.type是一个Function
+    //然后加()运行，参数是fiber.props，
+    //这个props，是函数的参数，传进来的name = "foo"
+    //这个name在返回h1数据对象的时候要用
+    //fiber.props和fiber.type是平级的，详见createElement
+    //返回里边的h1标签
+    const children = [fiber.type(fiber.props)];
+    reconcileChildren(fiber,children)
+
+
+  }
+  //如果是hostComponent，也就是原来的数据结构
+  function updateHostComponent(fiber){
+    //如果传进来没有dom这里会新建
+    if(!fiber.dom){
+      fiber.dom = createDom(fiber);
+    }
+
+    /*
+    //为了防止渲染不完成的dom，所以我们从这里删除变种dom
+    //留到最后再渲染
+    if(filter.parent){
+       fiber.parent.dom.appendChild(fiber.dom);
+    }
+    */
+
+    //create new fibers
+    const elements = fiber.props.children
+    //校对
+    reconcileChildren(fiber,elements);
+    
+  }
+
+
+
+
 
 
   //diff,这部分很有意思
@@ -312,14 +373,26 @@ function createElement(type, props, ...children) {
     render
   };
   
+  //刚开始createElement只是存储dom信息，真正生成dom
+  //是再createDom函数，而createDom是在fiber中进行的
+
   /** @jsx qcact.createElement */
-  // const element = (
-  //   <div style="background: salmon">
-  //     <h1>Hello World</h1>
-  //     <h2 style="text-align:right">from qcact</h2>
-  //   </div>
-  // );
+
+
+
+
+  /*
+  const element = (
+     <div style="background: salmon">
+       <h1>Hello World</h1>
+       <h2 style="text-align:right">from qcact</h2>
+     </div>
+  );
+  */
   
+
+
+  /*
   const container = document.getElementById("root");
 
   //如果触发了事件，更改了child
@@ -341,4 +414,24 @@ function createElement(type, props, ...children) {
 
   //生产出第一个fiber tree
   rerender("World")
+
+  */
+
+  function App(props){
+    return <h1>Hi,{props.name}</h1>
+  }
+
+  const element = <App name="foo" />
+  const container = document.getElementById("root");
+  //相当于直接放进去一个Function
+  //区别于之前的对象
+  qcact.render(element,container);
+
+
+
+
+
+
+
+
   
