@@ -110,8 +110,11 @@ function createElement(type, props, ...children) {
     //处理需要删除的node
     deletions.forEach(commitWork);
 
-
+    //渲染的时候是从顶层开始渲染的
     commitWork(wipRoot.child);
+    //每次渲染完之后会留下一个currentRoot，包含上一次fiber树的全部信息
+    //是代码里边主动渲染的渲染起点
+    //当然render里边的currentRoot是最最开始，那是它还是null
     currentRoot = wipRoot;
     wipRoot = null;
 
@@ -163,17 +166,13 @@ function createElement(type, props, ...children) {
       //链表和递归简直是天作之合
       commitDeletion(fiber.child,domParent);
     }
-
-
-
-
   }
 
 
 
   //render像是给了一个初始状态一样
   function render(element,container){
-    //root
+    //root 
     wipRoot = {
       dom:container,
       props:{
@@ -183,7 +182,7 @@ function createElement(type, props, ...children) {
     }
     deletions = [];
     //给一个初始工作空间
-    //初始fiber
+    //初始fiber，从根开始
     nextUnitOfWork = wipRoot;
   }
 
@@ -197,7 +196,9 @@ function createElement(type, props, ...children) {
     let shouldYield = false;
 
     while(nextUnitOfWork && !shouldYield){
-      //从这里开始一个个fiber的执行，
+      //这里生成的是一整个fiber链表，起点就是传进来的根，
+      //然后找到一个头之后，因为它的child、parent、sibling都挂载的有对象，我们可以一个个找下去
+      //然后最终牵出整个链条，在下边渲染
       nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
       //deadline参数,我们可以用它来检查距离浏览器需要再次控制还有多少时间。
       shouldYield = deadline.timeRemaining()<1
@@ -215,6 +216,7 @@ function createElement(type, props, ...children) {
   requestIdleCallback(workLoop);
 
 
+  //work in progress
   function performUnitOfWork(fiber){
 
     const isFunctionComponent = fiber.type instanceof Function
@@ -247,10 +249,17 @@ function createElement(type, props, ...children) {
 
   }
 
-  //如果是函数组件
-  
+  //函数组件,又在里边加了一些钩子相关的东西
+  let wipFiber = null;  
+  let hookIndex = null;
+
   function updateFunctionComponent(fiber){
-    //todo
+    
+    //当前fiber，钩子索引，和钩子数组
+    wipFiber = fiber;
+    hookIndex = 0;
+    wipFiber.hooks = [];
+
     //fiber.type是一个Function
     //然后加()运行，参数是fiber.props，
     //这个props，是函数的参数，传进来的name = "foo"
@@ -259,9 +268,54 @@ function createElement(type, props, ...children) {
     //返回里边的h1标签
     const children = [fiber.type(fiber.props)];
     reconcileChildren(fiber,children)
+  }
+
+  function useState(initial){
+    //todo
+    const oldHook = 
+      wipFiber.alternate && 
+      wipFiber.alternate.hooks &&
+      wipFiber.alternate.hooks[hookIndex];//返回了最后一个
+    
+    const hook = {
+      state:oldHook?oldHook.state:initial,
+      queue:[]
+    }
+
+    //==2.然后再下一次渲染组件的时候就会触发useState
+    //render是fiber的开始,fiber结束就是commit，当然类比render也可以主动触发，见下边setState
+    //从旧的钩子队列里获取动作队列
+    const actions = oldHook ? oldHook.queue :[]
+    //如果有就遍历变更状态方便后期commit更新,action是setState返回的函数
+    actions.forEach(action => hook.state = action(hook.state))
+
+
+    //setState本身也是需要触发的
+    const setState = action =>{
+      hook.queue.push(action);//将动作推送到我们添加了钩子的队列里
+
+      //==1.设置一个新的工作区间，开始新一轮的渲染
+      //每次渲染完之后会留下一个currentRoot，包含上一次fiber树的全部信息
+      //是代码里边主动渲染的渲染起点
+      wipRoot = {
+        dom:currentRoot.dom,
+        props:currentRoot.props,
+        alternate:currentRoot
+      }
+      nextUnitOfWork = wipRoot;
+      deletions = [];
+
+    }
+
+    wipFiber.hooks.push(hook);
+    hookIndex ++;
+    return [hook.state,setState]
+
 
 
   }
+
+
   //如果是hostComponent，也就是原来的数据结构
   function updateHostComponent(fiber){
     //如果传进来没有dom这里会新建
@@ -293,7 +347,7 @@ function createElement(type, props, ...children) {
   function reconcileChildren(wipFiber, elements) {
 
     let index = 0
-    //判断是否有旧的fiber
+    //判断是否有旧的fiber，第一遍之后alternate就有值了
     let oldFiber = wipFiber.alternate  && wipFiber.alternate.child;
     let prevSibling = null
 
@@ -312,7 +366,7 @@ function createElement(type, props, ...children) {
         oldFiber && 
         element &&
         element.type === oldFiber.type
-      
+      //更新的时候，会用到oldFiber，也就是交替节点，这个出现在第一遍之后
       if(sameType){
         //todo update the node
         newFiber = {
@@ -368,9 +422,12 @@ function createElement(type, props, ...children) {
   }
 
 
+
   const qcact = {
     createElement,
-    render
+    render,
+    useState
+    
   };
   
   //刚开始createElement只是存储dom信息，真正生成dom
@@ -390,8 +447,6 @@ function createElement(type, props, ...children) {
   );
   */
   
-
-
   /*
   const container = document.getElementById("root");
 
@@ -417,15 +472,33 @@ function createElement(type, props, ...children) {
 
   */
 
+
+  /*
+  //function component
   function App(props){
     return <h1>Hi,{props.name}</h1>
   }
-
   const element = <App name="foo" />
+  */
+
+
+  //useState
+  function Counter(){
+    const [state,setState] = qcact.useState(1);
+    return(
+      <h1 onClick={()=>setState(c=>c+1)}>
+        Count:{state}
+      </h1>
+    )
+  }
+
+  const element = <Counter />
   const container = document.getElementById("root");
   //相当于直接放进去一个Function
   //区别于之前的对象
   qcact.render(element,container);
+
+
 
 
 

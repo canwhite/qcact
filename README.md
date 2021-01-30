@@ -12,7 +12,7 @@
 7. Function Components  
 8. Hooks
    
-目前进行到6,未完待续
+8个目标已经完成 zack 2021/1/31
 
 
 ## run
